@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"flag"
 	"fmt"
 	"io"
 	"log"
@@ -17,14 +18,12 @@ import (
 )
 
 const (
-	rumbleBaseURL    = "https://rumble.com"
-	rumbleChannelURL = "/c/SebGorka/videos"
-	dateLayout       = "2006-01-02T15:04:05-07:00"
+	rumbleBaseURL = "https://rumble.com"
+	dateLayout    = "2006-01-02T15:04:05-07:00"
 
 	httpClientTimeout      = 10 * time.Second
 	httpServerReadTimeout  = 5 * time.Second
 	httpServerWriteTimeout = 300 * time.Second
-	httpServerPort         = ":8080"
 
 	shutdownTimeout = 10 * time.Second
 )
@@ -50,10 +49,25 @@ func run(ctx context.Context, w io.Writer, args []string) error {
 	ctx, cancel := signal.NotifyContext(ctx, os.Interrupt)
 	defer cancel()
 
-	http.Handle("/", FeedHandler(ctx))
+	channelTitle := flag.String("title", "unknown title", "channel title")
+	channelDescription := flag.String("description", "unknown description", "channel description")
+	channelURL := flag.String("url", "", "channel URL")
+	port := flag.Int("port", 8080, "listen on this port")
+	flag.Parse()
+
+	if *channelURL == "" {
+		return fmt.Errorf("-url is required")
+	}
+
+	cBits := strings.Split(*channelURL, rumbleBaseURL)
+	if len(cBits) != 2 {
+		return fmt.Errorf("channelURL must start with " + rumbleBaseURL)
+	}
+
+	http.Handle("/", FeedHandler(ctx, *channelURL, *channelTitle, *channelDescription))
 
 	httpServer := &http.Server{
-		Addr:         httpServerPort,
+		Addr:         fmt.Sprintf(":%d", *port),
 		ReadTimeout:  httpServerReadTimeout,
 		WriteTimeout: httpServerWriteTimeout,
 	}
@@ -81,17 +95,13 @@ func run(ctx context.Context, w io.Writer, args []string) error {
 	return nil
 }
 
-func FeedHandler(ctx context.Context) http.HandlerFunc {
+func FeedHandler(ctx context.Context, channelURL, channelTitle, channelDescription string) http.HandlerFunc {
 
 	return func(w http.ResponseWriter, r *http.Request) {
 		pubDate := time.Now()
 		updatedDate := time.Now()
 
-		title := "Example Podcast"
-		link := rumbleBaseURL + rumbleChannelURL
-		description := "An example Podcast"
-
-		feed, err := GetFeed(ctx, title, link, description, pubDate, updatedDate)
+		feed, err := GetFeed(ctx, channelTitle, channelURL, channelDescription, pubDate, updatedDate)
 		if err != nil {
 			log.Print(err)
 			http.Error(w, err.Error(), http.StatusInternalServerError)
@@ -109,7 +119,7 @@ func GetFeed(ctx context.Context, title, link, description string, pubDate, upda
 	ctx2, cancel2 := context.WithTimeout(ctx, httpClientTimeout)
 	defer cancel2()
 
-	req, err := http.NewRequestWithContext(ctx2, "GET", rumbleBaseURL+rumbleChannelURL, nil)
+	req, err := http.NewRequestWithContext(ctx2, "GET", link, nil)
 	if err != nil {
 		return nil, err
 	}
