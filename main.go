@@ -64,11 +64,13 @@ func run(ctx context.Context, w io.Writer, args []string) error {
 			fmt.Fprintf(os.Stderr, "error listening and serving: %s\n", err)
 		}
 	}()
+
 	var wg sync.WaitGroup
 	wg.Add(1)
 	go func() {
 		defer wg.Done()
 		<-ctx.Done()
+		log.Printf("Shutting down...")
 		shutdownCtx, cancel := context.WithTimeout(ctx, shutdownTimeout)
 		defer cancel()
 		if err := httpServer.Shutdown(shutdownCtx); err != nil {
@@ -85,8 +87,8 @@ func FeedHandler(ctx context.Context) http.HandlerFunc {
 		pubDate := time.Now()
 		updatedDate := time.Now()
 
-		title := "eduncan911 Podcasts"
-		link := "http://eduncan911.com/"
+		title := "Example Podcast"
+		link := rumbleBaseURL + rumbleChannelURL
 		description := "An example Podcast"
 
 		feed, err := GetFeed(ctx, title, link, description, pubDate, updatedDate)
