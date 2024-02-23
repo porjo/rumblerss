@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"fmt"
 	"log"
 	"net/http"
@@ -8,26 +9,35 @@ import (
 	"time"
 
 	"github.com/PuerkitoBio/goquery"
-	"github.com/gorilla/feeds"
+	"github.com/eduncan911/podcast"
 )
 
 const (
-	rumbleURL  = "https://rumble.com/c/SebGorka/videos"
-	dateLayout = "2006-01-02T15:04:05-07:00"
+	rumbleBaseURL    = "https://rumble.com"
+	rumbleChannelURL = "/c/SebGorka/videos"
+	dateLayout       = "2006-01-02T15:04:05-07:00"
 )
 
 func main() {
-	feed := &feeds.Feed{
-		Title:       "jmoiron.net blog",
-		Link:        &feeds.Link{Href: "http://jmoiron.net/blog"},
-		Description: "discussion about tech, footie, photos",
-		Author:      &feeds.Author{Name: "Jason Moiron", Email: "jmoiron@jmoiron.net"},
-		Created:     time.Now(),
+
+	ctx, cancel := context.WithTimeout(context.Background(), time.Second*10)
+	defer cancel()
+
+	pubDate := time.Now()
+	updatedDate := time.Now()
+
+	p := podcast.New(
+		"eduncan911 Podcasts",
+		"http://eduncan911.com/",
+		"An example Podcast",
+		&pubDate, &updatedDate,
+	)
+
+	req, err := http.NewRequestWithContext(ctx, "GET", rumbleBaseURL+rumbleChannelURL, nil)
+	if err != nil {
+		log.Fatal(err)
 	}
-
-	feed.Items = []*feeds.Item{}
-
-	res, err := http.Get(rumbleURL)
+	res, err := http.DefaultClient.Do(req)
 	if err != nil {
 		log.Fatal(err)
 	}
@@ -50,6 +60,15 @@ func main() {
 			log.Fatal(err)
 		}
 
+		title := strings.TrimSpace(s.Find("h3.thumbnail__title").Text())
+		if title == "" {
+			title = "unknown title"
+		}
+		description := strings.TrimSpace(s.Find("div.videostream__description").Text())
+		if description == "" {
+			description = "unknown description"
+		}
+
 		publishTime := time.Time{}
 		publishTimeEl := s.Find("div.videostream__data time")
 		publishTimeStr, found := publishTimeEl.Attr("datetime")
@@ -61,16 +80,30 @@ func main() {
 		}
 
 		link := s.Find("a.videostream__link")
-		href, found := link.Attr("href")
+		href, _ := link.Attr("href")
+		if href == "" {
+			href = rumbleBaseURL
+		}
 
-		feed.Items = append(feed.Items, &feeds.Item{
-			Title:       "Limiting Concurrency in Go",
-			Link:        &feeds.Link{Href: href},
-			Description: "A discussion on controlled parallelism in golang",
-			Author:      &feeds.Author{Name: "Jason Moiron", Email: "jmoiron@jmoiron.net"},
-			Created:     publishTime,
-		})
+		// create an Item
+		item := podcast.Item{
+			Title:       title,
+			Link:        rumbleBaseURL + href,
+			Description: description,
+			PubDate:     &publishTime,
+		}
+		item.AddDuration(int64(duration.Seconds()))
 
-		fmt.Printf("%v href: https://rumble.com%s, %s, %s\n", found, href, duration, publishTime.Local())
+		thumbnailSrc, found := s.Find("img.thumbnail__image").Attr("src")
+		if found {
+			item.AddImage(thumbnailSrc)
+		}
+
+		if _, err := p.AddItem(item); err != nil {
+			log.Fatalf("error adding item: %q\n", err)
+		}
+
 	})
+
+	fmt.Printf("%s\n", p.String())
 }
