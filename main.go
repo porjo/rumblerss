@@ -18,6 +18,15 @@ const (
 	dateLayout       = "2006-01-02T15:04:05-07:00"
 )
 
+type Item struct {
+	Title        string
+	Description  string
+	Duration     string
+	PublishTime  string
+	ThumbnailSrc string
+	Link         string
+}
+
 func main() {
 
 	ctx, cancel := context.WithTimeout(context.Background(), time.Second*10)
@@ -26,84 +35,111 @@ func main() {
 	pubDate := time.Now()
 	updatedDate := time.Now()
 
+	title := "eduncan911 Podcasts"
+	link := "http://eduncan911.com/"
+	description := "An example Podcast"
+
+	feed, err := GetFeed(ctx, title, link, description, pubDate, updatedDate)
+	if err != nil {
+		log.Fatal(err)
+	}
+
+	fmt.Printf("%s\n", feed.String())
+
+}
+
+func GetFeed(ctx context.Context, title, link, description string, pubDate, updatedDate time.Time) (*podcast.Podcast, error) {
+
 	p := podcast.New(
-		"eduncan911 Podcasts",
-		"http://eduncan911.com/",
-		"An example Podcast",
+		title,
+		link,
+		description,
 		&pubDate, &updatedDate,
 	)
 
 	req, err := http.NewRequestWithContext(ctx, "GET", rumbleBaseURL+rumbleChannelURL, nil)
 	if err != nil {
-		log.Fatal(err)
+		return nil, err
 	}
 	res, err := http.DefaultClient.Do(req)
 	if err != nil {
-		log.Fatal(err)
+		return nil, err
 	}
 	defer res.Body.Close()
 	if res.StatusCode != 200 {
-		log.Fatalf("status code error: %d %s", res.StatusCode, res.Status)
+		return nil, err
 	}
 
 	doc, err := goquery.NewDocumentFromReader(res.Body)
 	if err != nil {
-		log.Fatal(err)
+		return nil, err
 	}
+
+	items := []Item{}
 
 	doc.Find("section.channel-listing__container div.videostream.thumbnail__grid--item").Each(func(i int, s *goquery.Selection) {
 
-		durationStr := strings.TrimSpace(s.Find("div.videostream__badge").Text())
+		item := Item{}
+		item.Duration = strings.TrimSpace(s.Find("div.videostream__badge").Text())
 
-		duration, err := parseDuration(durationStr)
-		if err != nil {
-			log.Fatal(err)
+		item.Title = strings.TrimSpace(s.Find("h3.thumbnail__title").Text())
+		if item.Title == "" {
+			item.Title = "unknown title"
+		}
+		item.Description = strings.TrimSpace(s.Find("div.videostream__description").Text())
+		if item.Description == "" {
+			item.Description = "unknown description"
 		}
 
-		title := strings.TrimSpace(s.Find("h3.thumbnail__title").Text())
-		if title == "" {
-			title = "unknown title"
-		}
-		description := strings.TrimSpace(s.Find("div.videostream__description").Text())
-		if description == "" {
-			description = "unknown description"
-		}
-
-		publishTime := time.Time{}
 		publishTimeEl := s.Find("div.videostream__data time")
-		publishTimeStr, found := publishTimeEl.Attr("datetime")
-		if found {
-			publishTime, err = time.Parse(dateLayout, publishTimeStr)
+		item.PublishTime, _ = publishTimeEl.Attr("datetime")
+
+		link := s.Find("a.videostream__link")
+		item.Link, _ = link.Attr("href")
+		if item.Link == "" {
+			item.Link = rumbleBaseURL
+		}
+
+		item.ThumbnailSrc, _ = s.Find("img.thumbnail__image").Attr("src")
+
+		items = append(items, item)
+	})
+
+	for _, i := range items {
+		publishTime := time.Time{}
+		if err != nil {
+			return nil, err
+		}
+		if i.PublishTime != "" {
+			publishTime, err = time.Parse(dateLayout, i.PublishTime)
 			if err != nil {
 				log.Fatal(err)
 			}
 		}
 
-		link := s.Find("a.videostream__link")
-		href, _ := link.Attr("href")
-		if href == "" {
-			href = rumbleBaseURL
-		}
-
-		// create an Item
 		item := podcast.Item{
-			Title:       title,
-			Link:        rumbleBaseURL + href,
-			Description: description,
+			Title:       i.Title,
+			Link:        rumbleBaseURL + i.Link,
+			Description: i.Description,
 			PubDate:     &publishTime,
 		}
-		item.AddDuration(int64(duration.Seconds()))
 
-		thumbnailSrc, found := s.Find("img.thumbnail__image").Attr("src")
-		if found {
-			item.AddImage(thumbnailSrc)
+		if i.Duration != "" {
+			duration, err := parseDuration(i.Duration)
+			if err != nil {
+				return nil, err
+			}
+			item.AddDuration(int64(duration.Seconds()))
+		}
+
+		if i.ThumbnailSrc != "" {
+			item.AddImage(i.ThumbnailSrc)
 		}
 
 		if _, err := p.AddItem(item); err != nil {
-			log.Fatalf("error adding item: %q\n", err)
+			return nil, fmt.Errorf("error adding item: %w", err)
 		}
+	}
 
-	})
-
-	fmt.Printf("%s\n", p.String())
+	return &p, nil
 }
