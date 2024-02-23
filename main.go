@@ -3,9 +3,13 @@ package main
 import (
 	"context"
 	"fmt"
+	"io"
 	"log"
 	"net/http"
+	"os"
+	"os/signal"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/PuerkitoBio/goquery"
@@ -16,6 +20,13 @@ const (
 	rumbleBaseURL    = "https://rumble.com"
 	rumbleChannelURL = "/c/SebGorka/videos"
 	dateLayout       = "2006-01-02T15:04:05-07:00"
+
+	httpClientTimeout      = 10 * time.Second
+	httpServerReadTimeout  = 5 * time.Second
+	httpServerWriteTimeout = 300 * time.Second
+	httpServerPort         = ":8080"
+
+	shutdownTimeout = 10 * time.Second
 )
 
 type Item struct {
@@ -28,36 +39,75 @@ type Item struct {
 }
 
 func main() {
+	ctx := context.Background()
+	if err := run(ctx, os.Stdout, os.Args); err != nil {
+		fmt.Fprintf(os.Stderr, "%s\n", err)
+		os.Exit(1)
+	}
+}
 
-	ctx, cancel := context.WithTimeout(context.Background(), time.Second*10)
+func run(ctx context.Context, w io.Writer, args []string) error {
+	ctx, cancel := signal.NotifyContext(ctx, os.Interrupt)
 	defer cancel()
 
-	pubDate := time.Now()
-	updatedDate := time.Now()
+	http.Handle("/", FeedHandler(ctx))
 
-	title := "eduncan911 Podcasts"
-	link := "http://eduncan911.com/"
-	description := "An example Podcast"
-
-	feed, err := GetFeed(ctx, title, link, description, pubDate, updatedDate)
-	if err != nil {
-		log.Fatal(err)
+	httpServer := &http.Server{
+		Addr:         httpServerPort,
+		ReadTimeout:  httpServerReadTimeout,
+		WriteTimeout: httpServerWriteTimeout,
 	}
 
-	fmt.Printf("%s\n", feed.String())
+	go func() {
+		log.Printf("listening on %s\n", httpServer.Addr)
+		if err := httpServer.ListenAndServe(); err != nil && err != http.ErrServerClosed {
+			fmt.Fprintf(os.Stderr, "error listening and serving: %s\n", err)
+		}
+	}()
+	var wg sync.WaitGroup
+	wg.Add(1)
+	go func() {
+		defer wg.Done()
+		<-ctx.Done()
+		shutdownCtx, cancel := context.WithTimeout(ctx, shutdownTimeout)
+		defer cancel()
+		if err := httpServer.Shutdown(shutdownCtx); err != nil {
+			fmt.Fprintf(os.Stderr, "error shutting down http server: %s\n", err)
+		}
+	}()
+	wg.Wait()
+	return nil
+}
 
+func FeedHandler(ctx context.Context) http.HandlerFunc {
+
+	return func(w http.ResponseWriter, r *http.Request) {
+		pubDate := time.Now()
+		updatedDate := time.Now()
+
+		title := "eduncan911 Podcasts"
+		link := "http://eduncan911.com/"
+		description := "An example Podcast"
+
+		feed, err := GetFeed(ctx, title, link, description, pubDate, updatedDate)
+		if err != nil {
+			log.Print(err)
+			http.Error(w, err.Error(), http.StatusInternalServerError)
+		}
+
+		err = feed.Encode(w)
+		if err != nil {
+			log.Print(err)
+		}
+	}
 }
 
 func GetFeed(ctx context.Context, title, link, description string, pubDate, updatedDate time.Time) (*podcast.Podcast, error) {
 
-	p := podcast.New(
-		title,
-		link,
-		description,
-		&pubDate, &updatedDate,
-	)
+	ctx2, cancel2 := context.WithTimeout(ctx, httpClientTimeout)
+	defer cancel2()
 
-	req, err := http.NewRequestWithContext(ctx, "GET", rumbleBaseURL+rumbleChannelURL, nil)
+	req, err := http.NewRequestWithContext(ctx2, "GET", rumbleBaseURL+rumbleChannelURL, nil)
 	if err != nil {
 		return nil, err
 	}
@@ -104,6 +154,13 @@ func GetFeed(ctx context.Context, title, link, description string, pubDate, upda
 
 		items = append(items, item)
 	})
+
+	p := podcast.New(
+		title,
+		link,
+		description,
+		&pubDate, &updatedDate,
+	)
 
 	for _, i := range items {
 		publishTime := time.Time{}
