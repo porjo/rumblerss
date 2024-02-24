@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"encoding/json"
 	"flag"
 	"fmt"
 	"io"
@@ -28,6 +29,13 @@ const (
 	shutdownTimeout = 10 * time.Second
 )
 
+type Request struct {
+	Title       string
+	Description string
+	Link        string
+	PublishTime time.Time
+	UpdatedTime time.Time
+}
 type Item struct {
 	Title        string
 	Description  string
@@ -49,22 +57,10 @@ func run(ctx context.Context, w io.Writer, args []string) error {
 	ctx, cancel := signal.NotifyContext(ctx, os.Interrupt)
 	defer cancel()
 
-	channelTitle := flag.String("title", "unknown title", "channel title")
-	channelDescription := flag.String("description", "unknown description", "channel description")
-	channelURL := flag.String("url", "", "channel URL")
 	port := flag.Int("port", 8080, "listen on this port")
 	flag.Parse()
 
-	if *channelURL == "" {
-		return fmt.Errorf("-url is required")
-	}
-
-	cBits := strings.Split(*channelURL, rumbleBaseURL)
-	if len(cBits) != 2 {
-		return fmt.Errorf("channelURL must start with " + rumbleBaseURL)
-	}
-
-	http.Handle("/", FeedHandler(ctx, *channelURL, *channelTitle, *channelDescription))
+	http.Handle("/", FeedHandler(ctx))
 
 	httpServer := &http.Server{
 		Addr:         fmt.Sprintf(":%d", *port),
@@ -95,13 +91,42 @@ func run(ctx context.Context, w io.Writer, args []string) error {
 	return nil
 }
 
-func FeedHandler(ctx context.Context, channelURL, channelTitle, channelDescription string) http.HandlerFunc {
+func FeedHandler(ctx context.Context) http.HandlerFunc {
 
 	return func(w http.ResponseWriter, r *http.Request) {
-		pubDate := time.Now()
-		updatedDate := time.Now()
 
-		feed, err := GetFeed(ctx, channelTitle, channelURL, channelDescription, pubDate, updatedDate)
+		var req Request
+
+		err := json.NewDecoder(r.Body).Decode(&req)
+		if err != nil {
+			http.Error(w, err.Error(), http.StatusBadRequest)
+			return
+		}
+
+		if req.Link == "" {
+			http.Error(w, fmt.Sprintf("link is required"), http.StatusBadRequest)
+			return
+		}
+		cBits := strings.Split(req.Link, rumbleBaseURL)
+		if len(cBits) != 2 {
+			http.Error(w, fmt.Sprintf("link must start with "+rumbleBaseURL), http.StatusBadRequest)
+			return
+		}
+		if req.Title == "" {
+			req.Title = "unknown title"
+		}
+		if req.Description == "" {
+			req.Description = "unknown description"
+		}
+
+		if req.PublishTime.IsZero() {
+			req.PublishTime = time.Now()
+		}
+		if req.UpdatedTime.IsZero() {
+			req.UpdatedTime = time.Now()
+		}
+
+		feed, err := GetFeed(ctx, req)
 		if err != nil {
 			log.Print(err)
 			http.Error(w, err.Error(), http.StatusInternalServerError)
@@ -114,12 +139,12 @@ func FeedHandler(ctx context.Context, channelURL, channelTitle, channelDescripti
 	}
 }
 
-func GetFeed(ctx context.Context, title, link, description string, pubDate, updatedDate time.Time) (*podcast.Podcast, error) {
+func GetFeed(ctx context.Context, r Request) (*podcast.Podcast, error) {
 
 	ctx2, cancel2 := context.WithTimeout(ctx, httpClientTimeout)
 	defer cancel2()
 
-	req, err := http.NewRequestWithContext(ctx2, "GET", link, nil)
+	req, err := http.NewRequestWithContext(ctx2, "GET", r.Link, nil)
 	if err != nil {
 		return nil, err
 	}
@@ -168,10 +193,10 @@ func GetFeed(ctx context.Context, title, link, description string, pubDate, upda
 	})
 
 	p := podcast.New(
-		title,
-		link,
-		description,
-		&pubDate, &updatedDate,
+		r.Title,
+		r.Link,
+		r.Description,
+		&r.PublishTime, &r.UpdatedTime,
 	)
 
 	for _, i := range items {
