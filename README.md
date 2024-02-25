@@ -13,8 +13,8 @@ curl localhost:8080?link=https://rumble.com/c/mychannel/videos
 ```
 
 URL Parameters:
-- link: Rumble channel URL
-- title: (optional) title to use for the feed
-- description: (optional) description to use for the feed
-- publishTime: (optional) publish time for the feed
+- `link`: Rumble channel URL
+- `title`: (optional) title to use for the feed
+- `description`: (optional) description to use for the feed
+- `publishTime`: (optional) publish time for the feed
 
