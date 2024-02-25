@@ -65,6 +65,11 @@ func run(ctx context.Context, w io.Writer, args []string) error {
 	//e.Use(middleware.Recover())
 	e.GET("/", FeedHandler)
 
+	e.HTTPErrorHandler = func(err error, c echo.Context) {
+		c.Logger().Error(err)
+		c.Echo().DefaultHTTPErrorHandler(err, c)
+	}
+
 	httpServer := &http.Server{
 		Addr:         fmt.Sprintf(":%d", *port),
 		ReadTimeout:  httpServerReadTimeout,
@@ -75,7 +80,7 @@ func run(ctx context.Context, w io.Writer, args []string) error {
 	go func() {
 		log.Printf("listening on %s\n", httpServer.Addr)
 		if err := httpServer.ListenAndServe(); err != nil && err != http.ErrServerClosed {
-			fmt.Fprintf(os.Stderr, "error listening and serving: %s\n", err)
+			e.Logger.Errorf("error listening and serving: %s\n", err)
 		}
 	}()
 
@@ -88,7 +93,7 @@ func run(ctx context.Context, w io.Writer, args []string) error {
 		shutdownCtx, cancel := context.WithTimeout(ctx, shutdownTimeout)
 		defer cancel()
 		if err := httpServer.Shutdown(shutdownCtx); err != nil {
-			fmt.Fprintf(os.Stderr, "error shutting down http server: %s\n", err)
+			e.Logger.Errorf("error shutting down http server: %s\n", err)
 		}
 	}()
 	wg.Wait()
@@ -103,15 +108,15 @@ func FeedHandler(c echo.Context) error {
 	req.Link = c.QueryParam("link")
 	req.Title = c.QueryParam("title")
 	req.Description = c.QueryParam("description")
-	publishTimeStr := c.QueryParam("publish_time")
+	publishTimeStr := c.QueryParam("publishTime")
 	req.UpdatedTime = time.Now()
 
 	if req.Link == "" {
-		return fmt.Errorf("link is required")
+		return echo.NewHTTPError(http.StatusBadRequest, "link is required")
 	}
 	cBits := strings.Split(req.Link, rumbleBaseURL)
 	if len(cBits) != 2 {
-		return fmt.Errorf("link must start with " + rumbleBaseURL)
+		return echo.NewHTTPError(http.StatusBadRequest, "link must start with "+rumbleBaseURL)
 	}
 	if req.Title == "" {
 		req.Title = "unknown title"
@@ -124,7 +129,7 @@ func FeedHandler(c echo.Context) error {
 		var err error
 		req.PublishTime, err = time.Parse(time.RFC3339, publishTimeStr)
 		if err != nil {
-			return err
+			return echo.NewHTTPError(http.StatusBadRequest, fmt.Sprintf("unable to parse publishTime: %s", err))
 		}
 	}
 	if req.UpdatedTime.IsZero() {
