@@ -2,7 +2,6 @@ package main
 
 import (
 	"context"
-	"encoding/json"
 	"flag"
 	"fmt"
 	"io"
@@ -16,6 +15,7 @@ import (
 
 	"github.com/PuerkitoBio/goquery"
 	"github.com/eduncan911/podcast"
+	"github.com/labstack/echo/v4"
 )
 
 const (
@@ -60,12 +60,16 @@ func run(ctx context.Context, w io.Writer, args []string) error {
 	port := flag.Int("port", 8080, "listen on this port")
 	flag.Parse()
 
-	http.Handle("/", FeedHandler(ctx))
+	e := echo.New()
+	//	e.Use(middleware.Logger())
+	//e.Use(middleware.Recover())
+	e.GET("/", FeedHandler)
 
 	httpServer := &http.Server{
 		Addr:         fmt.Sprintf(":%d", *port),
 		ReadTimeout:  httpServerReadTimeout,
 		WriteTimeout: httpServerWriteTimeout,
+		Handler:      e,
 	}
 
 	go func() {
@@ -91,52 +95,53 @@ func run(ctx context.Context, w io.Writer, args []string) error {
 	return nil
 }
 
-func FeedHandler(ctx context.Context) http.HandlerFunc {
+func FeedHandler(c echo.Context) error {
 
-	return func(w http.ResponseWriter, r *http.Request) {
+	var req Request
 
-		var req Request
+	// Get team and member from the query string
+	req.Link = c.QueryParam("link")
+	req.Title = c.QueryParam("title")
+	req.Description = c.QueryParam("description")
+	publishTimeStr := c.QueryParam("publish_time")
+	req.UpdatedTime = time.Now()
 
-		err := json.NewDecoder(r.Body).Decode(&req)
+	if req.Link == "" {
+		return fmt.Errorf("link is required")
+	}
+	cBits := strings.Split(req.Link, rumbleBaseURL)
+	if len(cBits) != 2 {
+		return fmt.Errorf("link must start with " + rumbleBaseURL)
+	}
+	if req.Title == "" {
+		req.Title = "unknown title"
+	}
+	if req.Description == "" {
+		req.Description = "unknown description"
+	}
+
+	if publishTimeStr != "" {
+		var err error
+		req.PublishTime, err = time.Parse(time.RFC3339, publishTimeStr)
 		if err != nil {
-			http.Error(w, err.Error(), http.StatusBadRequest)
-			return
-		}
-
-		if req.Link == "" {
-			http.Error(w, fmt.Sprintf("link is required"), http.StatusBadRequest)
-			return
-		}
-		cBits := strings.Split(req.Link, rumbleBaseURL)
-		if len(cBits) != 2 {
-			http.Error(w, fmt.Sprintf("link must start with "+rumbleBaseURL), http.StatusBadRequest)
-			return
-		}
-		if req.Title == "" {
-			req.Title = "unknown title"
-		}
-		if req.Description == "" {
-			req.Description = "unknown description"
-		}
-
-		if req.PublishTime.IsZero() {
-			req.PublishTime = time.Now()
-		}
-		if req.UpdatedTime.IsZero() {
-			req.UpdatedTime = time.Now()
-		}
-
-		feed, err := GetFeed(ctx, req)
-		if err != nil {
-			log.Print(err)
-			http.Error(w, err.Error(), http.StatusInternalServerError)
-		}
-
-		err = feed.Encode(w)
-		if err != nil {
-			log.Print(err)
+			return err
 		}
 	}
+	if req.UpdatedTime.IsZero() {
+		req.UpdatedTime = time.Now()
+	}
+
+	feed, err := GetFeed(c.Request().Context(), req)
+	if err != nil {
+		return err
+	}
+
+	err = feed.Encode(c.Response().Writer)
+	if err != nil {
+		return err
+	}
+
+	return nil
 }
 
 func GetFeed(ctx context.Context, r Request) (*podcast.Podcast, error) {
