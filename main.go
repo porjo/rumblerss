@@ -31,9 +31,7 @@ const (
 )
 
 type Request struct {
-	Link        string
-	PublishTime time.Time
-	UpdatedTime time.Time
+	Link string
 }
 type Item struct {
 	Title        string
@@ -112,8 +110,6 @@ func FeedHandler(c echo.Context) error {
 
 	// Get team and member from the query string
 	req.Link = c.QueryParam("link")
-	publishTimeStr := c.QueryParam("publishTime")
-	req.UpdatedTime = time.Now()
 
 	if req.Link == "" {
 		return echo.NewHTTPError(http.StatusBadRequest, "link is required")
@@ -121,17 +117,6 @@ func FeedHandler(c echo.Context) error {
 	cBits := strings.Split(req.Link, rumbleBaseURL)
 	if len(cBits) != 2 {
 		return echo.NewHTTPError(http.StatusBadRequest, "link must start with "+rumbleBaseURL)
-	}
-
-	if publishTimeStr != "" {
-		var err error
-		req.PublishTime, err = time.Parse(time.RFC3339, publishTimeStr)
-		if err != nil {
-			return echo.NewHTTPError(http.StatusBadRequest, fmt.Sprintf("unable to parse publishTime: %s", err))
-		}
-	}
-	if req.UpdatedTime.IsZero() {
-		req.UpdatedTime = time.Now()
 	}
 
 	feed, err := GetFeed(c.Request().Context(), req)
@@ -204,11 +189,14 @@ func GetFeed(ctx context.Context, r Request) (*podcast.Podcast, error) {
 		items = append(items, item)
 	})
 
+	now := time.Now()
+
 	p := podcast.New(
 		feedTitle,
 		r.Link,
-		"", // empty feed description
-		&r.PublishTime, &r.UpdatedTime,
+		"",   // empty feed description
+		&now, // pubDate
+		&now, // lastBuildDate
 	)
 
 	if feedThumb != "" {
