@@ -31,8 +31,6 @@ const (
 )
 
 type Request struct {
-	Title       string
-	Description string
 	Link        string
 	PublishTime time.Time
 	UpdatedTime time.Time
@@ -114,8 +112,6 @@ func FeedHandler(c echo.Context) error {
 
 	// Get team and member from the query string
 	req.Link = c.QueryParam("link")
-	req.Title = c.QueryParam("title")
-	req.Description = c.QueryParam("description")
 	publishTimeStr := c.QueryParam("publishTime")
 	req.UpdatedTime = time.Now()
 
@@ -125,12 +121,6 @@ func FeedHandler(c echo.Context) error {
 	cBits := strings.Split(req.Link, rumbleBaseURL)
 	if len(cBits) != 2 {
 		return echo.NewHTTPError(http.StatusBadRequest, "link must start with "+rumbleBaseURL)
-	}
-	if req.Title == "" {
-		req.Title = "unknown title"
-	}
-	if req.Description == "" {
-		req.Description = "unknown description"
 	}
 
 	if publishTimeStr != "" {
@@ -182,6 +172,10 @@ func GetFeed(ctx context.Context, r Request) (*podcast.Podcast, error) {
 
 	items := []Item{}
 
+	feedHeader := doc.Find("div.channel-header--content")
+	feedTitle := feedHeader.Find("div.channel-header--title h1").Text()
+	feedThumb, _ := feedHeader.Find("div.channel-header--thumb img").Attr("src")
+
 	doc.Find("section.channel-listing__container div.videostream.thumbnail__grid--item").Each(func(i int, s *goquery.Selection) {
 
 		item := Item{}
@@ -211,11 +205,15 @@ func GetFeed(ctx context.Context, r Request) (*podcast.Podcast, error) {
 	})
 
 	p := podcast.New(
-		r.Title,
+		feedTitle,
 		r.Link,
-		r.Description,
+		"", // empty feed description
 		&r.PublishTime, &r.UpdatedTime,
 	)
+
+	if feedThumb != "" {
+		p.AddImage(feedThumb)
+	}
 
 	for _, i := range items {
 		publishTime := time.Time{}
