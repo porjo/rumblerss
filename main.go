@@ -46,17 +46,6 @@ type Item struct {
 	Link         string
 }
 
-type flagStrings []string
-
-func (i *flagStrings) String() string {
-	return strings.Join(*i, ",")
-}
-
-func (i *flagStrings) Set(value string) error {
-	*i = append(*i, value)
-	return nil
-}
-
 func main() {
 	ctx := context.Background()
 	if err := run(ctx, os.Stdout, os.Args); err != nil {
@@ -69,18 +58,19 @@ func run(ctx context.Context, w io.Writer, args []string) error {
 	ctx, cancel := signal.NotifyContext(ctx, os.Interrupt)
 	defer cancel()
 
-	var CORSOrigins flagStrings
-	flag.Var(&CORSOrigins, "CORSOrigin", "CORS origin")
+	CORSOrigins := flag.String("cors-origins", "", "comma separated list of CORS origins")
 	port := flag.Int("port", 8080, "listen on this port")
 	flag.Parse()
 
 	e := echo.New()
-	//	e.Use(middleware.Logger())
-	//e.Use(middleware.Recover())
-	e.Use(middleware.CORSWithConfig(middleware.CORSConfig{
-		AllowOrigins: CORSOrigins,
-		AllowHeaders: []string{echo.HeaderOrigin},
-	}))
+	if *CORSOrigins != "" {
+		origins := strings.Split(*CORSOrigins, ",")
+		log.Printf("Using CORS origins: %s", origins)
+		e.Use(middleware.CORSWithConfig(middleware.CORSConfig{
+			AllowOrigins: origins,
+			AllowHeaders: []string{echo.HeaderOrigin},
+		}))
+	}
 	e.GET("/", FeedHandler)
 
 	e.HTTPErrorHandler = func(err error, c echo.Context) {

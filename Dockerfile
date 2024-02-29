@@ -18,4 +18,4 @@ RUN apk update && apk upgrade
 WORKDIR /app
 COPY --from=build-env /app/rumblerss /app/
 
-CMD ["/app/rumblerss"]
+ENTRYPOINT ["/app/rumblerss"]
