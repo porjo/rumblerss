@@ -10,7 +10,7 @@ import (
 func parseDuration(durationStr string) (time.Duration, error) {
 	parts := strings.Split(durationStr, ":")
 	if len(parts) < 2 || len(parts) > 3 {
-		return 0, fmt.Errorf("invalid duration format")
+		return 0, fmt.Errorf("invalid duration format %q", durationStr)
 	}
 
 	var hours, minutes, seconds int
