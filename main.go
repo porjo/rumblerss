@@ -32,7 +32,7 @@ func run(ctx context.Context) error {
 	ctx, cancel := signal.NotifyContext(ctx, os.Interrupt)
 	defer cancel()
 
-	CORSOrigins := flag.String("cors-origins", "", "comma separated list of CORS origin domains")
+	CORSOrigins := flag.String("cors-origins", "", "comma separated list of CORS origins e.g. https://example.com")
 	port := flag.Int("port", 8080, "listen on this port")
 	flag.Parse()
 
