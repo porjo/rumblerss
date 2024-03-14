@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"log"
 	"net/http"
+	"net/url"
 	"strings"
 	"time"
 
@@ -14,8 +15,8 @@ import (
 )
 
 const (
-	rumbleBaseURL = "https://rumble.com/c/"
-	dateLayout    = "2006-01-02T15:04:05-07:00"
+	rumbleHost = "rumble.com"
+	dateLayout = "2006-01-02T15:04:05-07:00"
 
 	httpClientTimeout      = 10 * time.Second
 	httpServerReadTimeout  = 5 * time.Second
@@ -23,7 +24,8 @@ const (
 )
 
 type Request struct {
-	Channel string
+	Channel     string
+	ChannelPath string
 }
 type Item struct {
 	Title        string
@@ -40,21 +42,32 @@ func FeedHandler(c echo.Context) error {
 
 	link := c.QueryParam("link")
 
-	if link == "" {
-		return echo.NewHTTPError(http.StatusBadRequest, "link is required")
-	}
-	bits := strings.Split(link, rumbleBaseURL)
-	if len(bits) != 2 {
-		return echo.NewHTTPError(http.StatusBadRequest, "link must start with "+rumbleBaseURL)
+	url, err := url.Parse(link)
+	if err != nil {
+		return echo.NewHTTPError(http.StatusBadRequest, "could not parse link")
 	}
 
-	bits = strings.Split(bits[1], "/")
-	if len(bits) < 1 {
-		return echo.NewHTTPError(http.StatusBadRequest, "channel name could not be found in link")
+	if url.Host != rumbleHost {
+		return echo.NewHTTPError(http.StatusBadRequest, "link must use host "+rumbleHost)
 	}
 
-	req.Channel = strings.TrimSpace(bits[0])
-	if req.Channel == "" {
+	// Trim anything from link after channel name
+	bits := strings.Split(url.Path, "/")
+	switch {
+	case len(bits) == 2:
+		req.Channel = bits[1]
+		req.ChannelPath = "/" + bits[1]
+	case len(bits) > 2:
+		if bits[1] == "c" {
+			req.Channel = bits[2]
+			req.ChannelPath = strings.Join(bits[:3], "/")
+		} else {
+			req.Channel = bits[1]
+			req.ChannelPath = "/" + bits[1]
+		}
+	}
+
+	if req.ChannelPath == "" {
 		return echo.NewHTTPError(http.StatusBadRequest, "channel name could not be found in link")
 	}
 
@@ -76,7 +89,7 @@ func GetFeed(ctx context.Context, r Request) (*podcast.Podcast, error) {
 	ctx2, cancel2 := context.WithTimeout(ctx, httpClientTimeout)
 	defer cancel2()
 
-	channelLink := rumbleBaseURL + r.Channel
+	channelLink := "https://" + rumbleHost + r.ChannelPath
 	req, err := http.NewRequestWithContext(ctx2, "GET", channelLink, nil)
 	if err != nil {
 		return nil, err
@@ -121,7 +134,7 @@ func GetFeed(ctx context.Context, r Request) (*podcast.Podcast, error) {
 		link := s.Find("a.videostream__link")
 		item.Link, _ = link.Attr("href")
 		if item.Link == "" {
-			item.Link = rumbleBaseURL
+			item.Link = "https://" + rumbleHost
 		}
 
 		item.ThumbnailSrc, _ = s.Find("img.thumbnail__image").Attr("src")
@@ -157,7 +170,7 @@ func GetFeed(ctx context.Context, r Request) (*podcast.Podcast, error) {
 
 		item := podcast.Item{
 			Title:       i.Title,
-			Link:        rumbleBaseURL + i.Link,
+			Link:        i.Link,
 			Description: i.Description,
 			PubDate:     &publishTime,
 		}
