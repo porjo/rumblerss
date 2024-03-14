@@ -14,7 +14,7 @@ import (
 )
 
 const (
-	rumbleBaseURL = "https://rumble.com"
+	rumbleBaseURL = "https://rumble.com/c/"
 	dateLayout    = "2006-01-02T15:04:05-07:00"
 
 	httpClientTimeout      = 10 * time.Second
@@ -23,7 +23,7 @@ const (
 )
 
 type Request struct {
-	Link string
+	Channel string
 }
 type Item struct {
 	Title        string
@@ -38,14 +38,24 @@ func FeedHandler(c echo.Context) error {
 
 	var req Request
 
-	req.Link = c.QueryParam("link")
+	link := c.QueryParam("link")
 
-	if req.Link == "" {
+	if link == "" {
 		return echo.NewHTTPError(http.StatusBadRequest, "link is required")
 	}
-	cBits := strings.Split(req.Link, rumbleBaseURL)
-	if len(cBits) != 2 {
+	bits := strings.Split(link, rumbleBaseURL)
+	if len(bits) != 2 {
 		return echo.NewHTTPError(http.StatusBadRequest, "link must start with "+rumbleBaseURL)
+	}
+
+	bits = strings.Split(bits[1], "/")
+	if len(bits) < 1 {
+		return echo.NewHTTPError(http.StatusBadRequest, "channel name could not be found in link")
+	}
+
+	req.Channel = strings.TrimSpace(bits[0])
+	if req.Channel == "" {
+		return echo.NewHTTPError(http.StatusBadRequest, "channel name could not be found in link")
 	}
 
 	feed, err := GetFeed(c.Request().Context(), req)
@@ -66,7 +76,8 @@ func GetFeed(ctx context.Context, r Request) (*podcast.Podcast, error) {
 	ctx2, cancel2 := context.WithTimeout(ctx, httpClientTimeout)
 	defer cancel2()
 
-	req, err := http.NewRequestWithContext(ctx2, "GET", r.Link, nil)
+	channelLink := rumbleBaseURL + r.Channel
+	req, err := http.NewRequestWithContext(ctx2, "GET", channelLink, nil)
 	if err != nil {
 		return nil, err
 	}
@@ -122,7 +133,7 @@ func GetFeed(ctx context.Context, r Request) (*podcast.Podcast, error) {
 
 	p := podcast.New(
 		feedTitle,
-		r.Link,
+		channelLink,
 		"",   // TODO fix empty feed description
 		&now, // pubDate
 		&now, // lastBuildDate

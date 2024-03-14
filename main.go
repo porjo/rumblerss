@@ -48,7 +48,7 @@ func run(ctx context.Context) error {
 	e.GET("/", FeedHandler)
 
 	e.HTTPErrorHandler = func(err error, c echo.Context) {
-		c.Logger().Error(err)
+		c.Logger().Errorf("error %s, request %q", err, c.Request().RequestURI)
 		c.Echo().DefaultHTTPErrorHandler(err, c)
 	}
 
