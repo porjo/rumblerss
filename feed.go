@@ -131,10 +131,11 @@ func GetFeed(ctx context.Context, r Request) (*podcast.Podcast, error) {
 		publishTimeEl := s.Find("div.videostream__data time")
 		item.PublishTime, _ = publishTimeEl.Attr("datetime")
 
+		item.Link = "https://" + rumbleHost
 		link := s.Find("a.videostream__link")
-		item.Link, _ = link.Attr("href")
-		if item.Link == "" {
-			item.Link = "https://" + rumbleHost
+		href, _ := link.Attr("href")
+		if href != "" {
+			item.Link += href
 		}
 
 		item.ThumbnailSrc, _ = s.Find("img.thumbnail__image").Attr("src")
