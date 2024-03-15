@@ -3,7 +3,6 @@ package main
 import (
 	"context"
 	"fmt"
-	"log"
 	"net/http"
 	"net/url"
 	"strings"
@@ -73,7 +72,7 @@ func FeedHandler(c echo.Context) error {
 
 	feed, err := GetFeed(c.Request().Context(), req)
 	if err != nil {
-		return err
+		return echo.NewHTTPError(http.StatusBadRequest, fmt.Sprintf("there was an error fetching the feed: %s", err))
 	}
 
 	err = feed.Encode(c.Response().Writer)
@@ -100,7 +99,7 @@ func GetFeed(ctx context.Context, r Request) (*podcast.Podcast, error) {
 	}
 	defer res.Body.Close()
 	if res.StatusCode != 200 {
-		return nil, err
+		return nil, fmt.Errorf("rumble.com returned unexpected status %q", res.Status)
 	}
 
 	doc, err := goquery.NewDocumentFromReader(res.Body)
@@ -165,7 +164,7 @@ func GetFeed(ctx context.Context, r Request) (*podcast.Podcast, error) {
 		if i.PublishTime != "" {
 			publishTime, err = time.Parse(dateLayout, i.PublishTime)
 			if err != nil {
-				log.Fatal(err)
+				return nil, err
 			}
 		}
 
