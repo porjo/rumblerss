@@ -1,0 +1,13 @@
+version: "3.8"
+
+services:
+  app:
+    container_name: rumblerss
+    restart: unless-stopped
+    image: rumblerss
+    build:
+      context: .
+    volumes:
+      - ./data:/etc/rumblerss
+    ports:
+      - 8080:8080
