@@ -2,7 +2,14 @@
 
 Simple webservice that takes a Rumble.com channel URL and returns an RSS feed containing a list of videos from the channel.
 
-## Example Usage
+## Example docker-compose Usage
+```
+git clone https://github.com/porjo/rumblerss.git
+cd rumblerss
+docker-compose up -d
+```
+
+## Example Docker Usage
 
 ```
 docker pull ghcr.io/porjo/rumblerss:latest

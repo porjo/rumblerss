@@ -1,8 +1,8 @@
 # Build stage
 FROM golang:alpine AS build-env
 
-COPY . /app
-WORKDIR /app
+COPY . /etc
+WORKDIR /etc
 
 RUN apk update && \
     apk upgrade && \
@@ -15,7 +15,7 @@ FROM alpine
 
 RUN apk update && apk upgrade
 
-WORKDIR /app
-COPY --from=build-env /app/rumblerss /app/
+WORKDIR /etc
+COPY --from=build-env /etc/rumblerss /etc/
 
-ENTRYPOINT ["/app/rumblerss"]
+ENTRYPOINT ["/etc/rumblerss"]
