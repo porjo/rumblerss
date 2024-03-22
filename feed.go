@@ -3,6 +3,7 @@ package main
 import (
 	"context"
 	"fmt"
+	"log/slog"
 	"net/http"
 	"net/url"
 	"strings"
@@ -178,7 +179,8 @@ func GetFeed(ctx context.Context, r Request) (*podcast.Podcast, error) {
 		if i.Duration != "" {
 			duration, err := parseDuration(i.Duration)
 			if err != nil {
-				return nil, err
+				// Error is non-fatal, just log
+				slog.Error("error parsing duration", "err", err)
 			}
 			item.AddDuration(int64(duration.Seconds()))
 		}
