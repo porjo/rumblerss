@@ -1,0 +1,13 @@
+version: "3.8"
+
+services:
+  app:
+    image: ghcr.io/porjo/rumblerss:latest
+    container_name: rumblerss
+    restart: unless-stopped
+# to build locally uncomment bellow and comment out the above image: ghcr.io link
+#    image: rumblerss
+#    build:
+#      context: .
+    ports:
+      - 8080:8080
