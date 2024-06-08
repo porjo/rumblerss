@@ -134,11 +134,11 @@ func GetFeed(ctx context.Context, r Request) (*podcast.Podcast, error) {
 
 		item := Item{}
 		info := s.Find("div.videostream__info")
-		item.Duration = strings.TrimSpace(info.Find("videostream__status--duration").Text())
-		live := info.Find("videostream__status--live")
+		item.Duration = strings.TrimSpace(info.Find(".videostream__status--duration").Text())
+		live := info.Find(".videostream__status--live")
 
 		// AFAIK there is no way to flag a podcast as live in iTunes RSS, but may be handy in future
-		if live != nil {
+		if len(live.Nodes) > 0 {
 			item.IsLiveBroadcast = true
 		}
 
