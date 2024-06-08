@@ -28,12 +28,13 @@ type Request struct {
 	ChannelPath string
 }
 type Item struct {
-	Title        string
-	Description  string
-	Duration     string
-	PublishTime  string
-	ThumbnailSrc string
-	Link         string
+	Title           string
+	Description     string
+	Duration        string
+	PublishTime     string
+	ThumbnailSrc    string
+	Link            string
+	IsLiveBroadcast bool
 }
 
 func FeedHandler(c echo.Context) error {
@@ -132,7 +133,14 @@ func GetFeed(ctx context.Context, r Request) (*podcast.Podcast, error) {
 		}
 
 		item := Item{}
-		item.Duration = strings.TrimSpace(s.Find("div.videostream__badge").Text())
+		info := s.Find("div.videostream__info")
+		item.Duration = strings.TrimSpace(info.Find("videostream__status--duration").Text())
+		live := info.Find("videostream__status--live")
+
+		// AFAIK there is no way to flag a podcast as live in iTunes RSS, but may be handy in future
+		if live != nil {
+			item.IsLiveBroadcast = true
+		}
 
 		item.Title = strings.TrimSpace(s.Find("h3.thumbnail__title").Text())
 		if item.Title == "" {
