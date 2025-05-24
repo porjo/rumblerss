@@ -10,8 +10,6 @@ import (
 	"os"
 	"os/signal"
 	"time"
-
-	"github.com/labstack/echo/v4"
 )
 
 const (
@@ -49,25 +47,21 @@ func run(ctx context.Context) error {
 		programLevel.Set(slog.LevelDebug)
 	}
 
-	e := echo.New()
-	e.GET("/", FeedHandler)
+	mux := http.NewServeMux()
 
-	e.HTTPErrorHandler = func(err error, c echo.Context) {
-		c.Logger().Errorf("error %s, request %q", err, c.Request().RequestURI)
-		c.Echo().DefaultHTTPErrorHandler(err, c)
-	}
+	mux.HandleFunc("/", FeedHandler)
 
 	httpServer := &http.Server{
 		Addr:         fmt.Sprintf(":%d", *port),
 		ReadTimeout:  httpServerReadTimeout,
 		WriteTimeout: httpServerWriteTimeout,
-		Handler:      e,
+		Handler:      mux,
 	}
 
 	go func() {
 		log.Printf("listening on %s\n", httpServer.Addr)
 		if err := httpServer.ListenAndServe(); err != nil && err != http.ErrServerClosed {
-			e.Logger.Errorf("error listening and serving: %s\n", err)
+			slog.Error("error listening and serving", "error", err)
 		}
 	}()
 
@@ -76,7 +70,7 @@ func run(ctx context.Context) error {
 	shutdownCtx, cancel := context.WithTimeout(ctx, shutdownTimeout)
 	defer cancel()
 	if err := httpServer.Shutdown(shutdownCtx); err != nil {
-		e.Logger.Errorf("error shutting down http server: %s\n", err)
+		slog.Error("error shutting down http server", "error", err)
 	}
 
 	return nil

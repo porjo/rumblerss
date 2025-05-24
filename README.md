@@ -42,7 +42,7 @@ curl localhost:8080?link=https://rumble.com/mychannel
 
 ## CORS
 
-[Cross-Origin Resource Sharing (CORS)](https://developer.mozilla.org/en-US/docs/Web/HTTP/CORS) should be handled by putting rumblerss behind a reverse proxy that can add the necessary header e.g. Caddy2
+[Cross-Origin Resource Sharing (CORS)](https://developer.mozilla.org/en-US/docs/Web/HTTP/CORS) should be handled by putting rumblerss behind a reverse proxy that can add the necessary header e.g. [Caddy](https://caddyserver.com)
 ```
         route /rumblerss/* {
                 header ?Access-Control-Allow-Origin https://porjo.github.io

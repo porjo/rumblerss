@@ -11,7 +11,6 @@ import (
 
 	"github.com/PuerkitoBio/goquery"
 	"github.com/eduncan911/podcast"
-	"github.com/labstack/echo/v4"
 )
 
 const (
@@ -37,29 +36,36 @@ type Item struct {
 	IsLiveBroadcast bool
 }
 
-func FeedHandler(c echo.Context) error {
+func FeedHandler(w http.ResponseWriter, r *http.Request) {
 
 	var req Request
 
-	link := c.QueryParam("link")
+	link := r.URL.Query().Get("link")
 
+	if link == "" {
+		http.Error(w, "'link' parameter not found", http.StatusBadRequest)
+		return
+	}
 	url, err := url.Parse(link)
 	if err != nil {
-		return echo.NewHTTPError(http.StatusBadRequest, "could not parse link")
+		http.Error(w, "could not parse link", http.StatusBadRequest)
+		return
 	}
 
 	if url.Scheme == "" {
 		link = "https://" + link
 		url, err = url.Parse(link)
 		if err != nil {
-			return echo.NewHTTPError(http.StatusBadRequest, "could not parse link")
+			http.Error(w, "could not parse link", http.StatusBadRequest)
+			return
 		}
 	}
 
 	slog.Debug("url", "url", fmt.Sprintf("%#v", url))
 
 	if url.Host != rumbleHost {
-		return echo.NewHTTPError(http.StatusBadRequest, "link must use host "+rumbleHost)
+		http.Error(w, "link must use host "+rumbleHost, http.StatusBadRequest)
+		return
 	}
 
 	// Trim anything from link after channel name
@@ -79,20 +85,21 @@ func FeedHandler(c echo.Context) error {
 	}
 
 	if req.ChannelPath == "" {
-		return echo.NewHTTPError(http.StatusBadRequest, "channel name could not be found in link")
+		http.Error(w, "channel name could not be found in link", http.StatusBadRequest)
+		return
 	}
 
-	feed, err := GetFeed(c.Request().Context(), req)
+	feed, err := GetFeed(r.Context(), req)
 	if err != nil {
-		return echo.NewHTTPError(http.StatusBadRequest, fmt.Sprintf("there was an error fetching the feed: %s", err))
+		http.Error(w, fmt.Sprintf("there was an error fetching the feed: %s", err), http.StatusBadRequest)
+		return
 	}
 
-	err = feed.Encode(c.Response().Writer)
+	err = feed.Encode(w)
 	if err != nil {
-		return err
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
 	}
-
-	return nil
 }
 
 func GetFeed(ctx context.Context, r Request) (*podcast.Podcast, error) {
