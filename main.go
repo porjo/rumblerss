@@ -9,11 +9,9 @@ import (
 	"net/http"
 	"os"
 	"os/signal"
-	"strings"
 	"time"
 
 	"github.com/labstack/echo/v4"
-	"github.com/labstack/echo/v4/middleware"
 )
 
 const (
@@ -37,7 +35,6 @@ func run(ctx context.Context) error {
 	ctx, cancel := signal.NotifyContext(ctx, os.Interrupt)
 	defer cancel()
 
-	CORSOrigins := flag.String("cors-origins", "", "comma separated list of CORS origins e.g. https://example.com")
 	port := flag.Int("port", 8080, "listen on this port")
 	debug := flag.Bool("debug", false, "debug log output")
 	flag.IntVar(&maxTextLength, "maxTextLength", 0, "limit each field to maximum number of characters (zero is unlimited)")
@@ -53,14 +50,6 @@ func run(ctx context.Context) error {
 	}
 
 	e := echo.New()
-	if *CORSOrigins != "" {
-		origins := strings.Split(*CORSOrigins, ",")
-		log.Printf("Using CORS origins: %s", origins)
-		e.Use(middleware.CORSWithConfig(middleware.CORSConfig{
-			AllowOrigins: origins,
-			AllowHeaders: []string{echo.HeaderOrigin},
-		}))
-	}
 	e.GET("/", FeedHandler)
 
 	e.HTTPErrorHandler = func(err error, c echo.Context) {

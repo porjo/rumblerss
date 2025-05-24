@@ -7,8 +7,6 @@ Simple webservice that takes a Rumble.com channel URL and returns an RSS feed co
 ```
 $ ./rumblerss -h
 Usage of ./rumblerss:
-  -cors-origins string
-        comma separated list of CORS origins e.g. https://example.com
   -debug
         debug log output
   -maxItemCount int
@@ -18,6 +16,7 @@ Usage of ./rumblerss:
   -port int
         listen on this port (default 8080)
 ```
+
 
 ## Docker
 
@@ -43,7 +42,11 @@ curl localhost:8080?link=https://rumble.com/mychannel
 
 ## CORS
 
-[Cross-Origin Resource Sharing (CORS)](https://developer.mozilla.org/en-US/docs/Web/HTTP/CORS)  is supported via the `cors-origins` command line flag. Supply a comma separated list of CORS origins or '*' for all origins e.g.
+[Cross-Origin Resource Sharing (CORS)](https://developer.mozilla.org/en-US/docs/Web/HTTP/CORS) should be handled by putting rumblerss behind a reverse proxy that can add the necessary header e.g. Caddy2
 ```
-docker run -d ghcr.io/porjo/rumblerss -cors-origins '*'
+        route /rumblerss/* {
+                header ?Access-Control-Allow-Origin https://porjo.github.io
+                uri strip_prefix /rumblerss
+                reverse_proxy 127.0.0.1:8080
+        }
 ```
