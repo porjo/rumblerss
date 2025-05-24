@@ -10,7 +10,6 @@ import (
 	"os"
 	"os/signal"
 	"strings"
-	"sync"
 	"time"
 
 	"github.com/labstack/echo/v4"
@@ -83,18 +82,13 @@ func run(ctx context.Context) error {
 		}
 	}()
 
-	var wg sync.WaitGroup
-	wg.Add(1)
-	go func() {
-		defer wg.Done()
-		<-ctx.Done()
-		log.Printf("Shutting down...")
-		shutdownCtx, cancel := context.WithTimeout(ctx, shutdownTimeout)
-		defer cancel()
-		if err := httpServer.Shutdown(shutdownCtx); err != nil {
-			e.Logger.Errorf("error shutting down http server: %s\n", err)
-		}
-	}()
-	wg.Wait()
+	<-ctx.Done()
+	log.Printf("Shutting down...")
+	shutdownCtx, cancel := context.WithTimeout(ctx, shutdownTimeout)
+	defer cancel()
+	if err := httpServer.Shutdown(shutdownCtx); err != nil {
+		e.Logger.Errorf("error shutting down http server: %s\n", err)
+	}
+
 	return nil
 }
